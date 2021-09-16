@@ -307,6 +307,19 @@
                 }
             ]
         },
+        "bitcoin:EGG": {
+            "links": {
+                "Github": "https://github.com/SirElven8/NestEGG",
+                "Homepage": "https://www.nesteggcoin.com"
+            },
+            "marketcap_usd": 0,
+            "name": "NestEGG Coin",
+            "shortcut": "EGG",
+            "t1_enabled": "yes",
+            "t2_enabled": "yes",
+            "type": "coin",
+            "wallet": []
+        },
         "bitcoin:ELEMENTS": {
             "links": {
                 "Github": "https://github.com/ElementsProject/elements",
