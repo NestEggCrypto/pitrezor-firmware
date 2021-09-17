@@ -52,7 +52,7 @@ Of course, If you are using the Adafruit bonnet, you don't need separate push bu
 
 7. Connect the other end of the USB cable to your computer or a USB power supply. You should see the pi boot sequence in the monitor and after 4-5 seconds the trezor logo should appear. Good! That confirms that your pi and SD card are working correctly.
 8. At this point you cannot do much, so disconnect the USB cable, HDMI adapter and cable and remove SD card.
-9. If you are using the Adafruit bonnet, it is time to connect it and go straight to the "Configuration" section below. Otherwise, continue reading
+9. If you are using the Adafruit bonnet, it is time to connect it and go straight to the [Configuration](https://github.com/NestEggCrypto/pitrezor-firmware/blob/main/HowTo.md#configuration) section below. Otherwise, continue reading
 10. Solder the 2 buttons to the pi as showed in the following diagram. The left button (called "no") is connected to the pins 30 and 32 (in yellow in the next picture). The right button (called "yes") is connected to the pins 34 and 36 (in red in the picture). This is the default setup but can be tweaked from configuration file. The pi 4 use the same pins.
 
 <img src="/img/pizero_gpio_schema.jpg" style="width:100%!important;"/>
@@ -70,9 +70,45 @@ Of course, If you are using the Adafruit bonnet, you don't need separate push bu
 
 <img src="/img/pitrezor_oled_pinout.jpg" style="width:100%!important;"/>
 
-21. Connect the SD card back to your computer and refer to the [configuration section]() below to correctly configure your OLED model and orientation. Their is only 2 possibles orientations so you can try both and see which one is better for you.
+21. Connect the SD card back to your computer and refer to the [configuration section](https://github.com/NestEggCrypto/pitrezor-firmware/blob/main/HowTo.md#configuration) below to correctly configure your OLED model and orientation. Their is only 2 possibles orientations so you can try both and see which one is better for you.
 22. Reconnect everything and retry your device. Now you should see the output on the HDMI connector if connected and also on the OLED at the same time.
 23. If that worked, put everything in a box!
 24. Enjoy!
 
 ## Configuration
+If you connect the SD card in your computer you should see a file named "`pitrezor.config`" in the first partition (boot partition). You can open this file with your favorite text editor. You will be able to change the configuration variables which are:
+
+* `TREZOR_OLED_SCALE`: This control the scale factor of the display to apply when using the HDMI output. A scale factor of 1 means the default size of 128x64 pixel. A scale factor of 2 will stretch the image to 256x128 and so on.
+* `TREZOR_OLED_TYPE`: Specify the type of OLED connected to the pi zero. The file enumerate the different value and their meaning. Select the one that match your OLED display.
+* `TREZOR_OLED_FLIP`: Set to 0 or 1 to control the image vertically (normal or inverted) This is useful depending how you assemble the OLED in n enclosure.
+* `TREZOR_GPIO_YES` and `TREZOR_GPIO_NO` : Specify the GPIO number to use for the yes/no button. If you soldered the buttons like mentionned in the tutorial, you can keep the default values.
+
+When you change a value, keep the line formating as-is with the export statement. Just change the number after the equal sign. If you change something else, this could prevent the pi trezor application to start correctly.
+
+# For the Adafruit bonnet, you must change the values to these:
+`export TREZOR_OLED_TYPE=1`
+`export TREZOR_OLED_FLIP=1`
+`export TREZOR_GPIO_YES=6`
+`export TREZOR_GPIO_NO=5`
+
+## Is this secure ?
+The main difference of this device versus the real trezor device is that the pi zero stores everything on the SD card. The equivalent of the flash memory for the trezor is stored in a file on the first partition. That means that anybody that has your SD card can access your seed words and private key.
+
+
+However, the wallet supports the usage of a passphrase. The passphrase is a kind of an extra seed word that is not stored on SD card. By using a passphrase, you would prevent a thief that could have your SD card to empty your wallet.
+
+Thus, the recommendation is to **__always use a passphrase__**!
+
+## Updating from previous pitrezor image
+If you are updating your pitrezor to the latest image you will need your seed words with you:
+
+* Make sure that you have seed backup available. This mean your word list !! If not, you'll need to transfer all your funds to another wallet and disconnect other services (like U2F, password manager etc.
+* Erase (Wipe) your pitrezor from trezor wallet or trezor suite application. This step improve the security before putting back the SD card in a PC in case it is infected.
+* Put the SD card in a PC and copy your `pitrezor.config` file from the SD card to the computer
+* Flash the SD card with the latest downloaded image
+* Disconnect and reconnect the SD card to your computer
+* Copy your `pitrezor.config` file from the computer to the SD card to overwrite the default version with your own version.
+* Eject the SD card from your computer and install it in the pi zero
+* Boot your pitrezor as usual
+* When you will go to the wallet web site, your pitrezor will be detected as a new device. Select the recover option. You will have to enter all the words of your seed word list (advanced recovery mode is recommended so that your seed will never be entered on a computer).
+* Don't forget to enable the passphrase option after if you were using one before. You should! If you haven't you can create new hidden wallet with a passphrase.
