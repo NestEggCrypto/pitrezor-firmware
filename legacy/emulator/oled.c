@@ -2,7 +2,6 @@
  * This file is part of the Trezor project, https://trezor.io/
  *
  * Copyright (C) 2017 Saleem Rashid <trezor@saleemrashid.com>
- * Modified Copyright (C) 2018, 2019, 2020 Yannick Heneault <yheneaul@gmail.com>
  *
  * This library is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -20,11 +19,7 @@
 
 #include "oled.h"
 
-#include <SDL.h>
-
-#ifdef PIZERO
-#include "pizero/pizero.h"
-#endif
+#include <SDL2/SDL.h>
 
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
@@ -104,10 +99,6 @@ void oledInit(void) {
       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                         SDL_TEXTUREACCESS_STREAMING, OLED_WIDTH, OLED_HEIGHT);
 
-#ifdef PIZERO
-  pizeroInit();	
-#endif
-
   oledClear();
   oledRefresh();
 }
@@ -133,10 +124,6 @@ void oledRefresh(void) {
   SDL_UpdateTexture(texture, NULL, data, OLED_WIDTH * sizeof(uint32_t));
   SDL_RenderCopy(renderer, texture, NULL, &dstrect);
   SDL_RenderPresent(renderer);
-
-#ifdef PIZERO
-  pizeroRefresh(buffer);
-#endif
 
   /* Return it back */
   oledInvertDebugLink();

@@ -40,6 +40,7 @@
 // memory allocation policies
 #define MICROPY_ALLOC_PATH_MAX      (128)
 #define MICROPY_ENABLE_PYSTACK      (1)
+#define MICROPY_LOADED_MODULES_DICT_SIZE (160)
 
 // emitters
 #define MICROPY_PERSISTENT_CODE_LOAD (0)
@@ -71,9 +72,7 @@
 #define MICROPY_REPL_AUTO_INDENT    (1)
 #define MICROPY_LONGINT_IMPL        (MICROPY_LONGINT_IMPL_MPZ)
 #define MICROPY_ENABLE_SOURCE_LINE  (1)
-#ifndef MICROPY_FLOAT_IMPL // can be configured by each board via mpconfigboard.mk
 #define MICROPY_FLOAT_IMPL          (MICROPY_FLOAT_IMPL_FLOAT)
-#endif
 #define MICROPY_STREAMS_NON_BLOCK   (1)
 #define MICROPY_MODULE_WEAK_LINKS   (1)
 #define MICROPY_CAN_OVERRIDE_BUILTINS (0)
@@ -93,6 +92,7 @@
 #define MICROPY_PY_BUILTINS_MEMORYVIEW (1)
 #define MICROPY_PY_BUILTINS_FROZENSET (0)
 #define MICROPY_PY_BUILTINS_SLICE_ATTRS (1)
+#define MICROPY_PY_BUILTINS_SLICE_INDICES (0)
 #define MICROPY_PY_BUILTINS_ROUND_INT (0)
 #define MICROPY_PY_REVERSE_SPECIAL_METHODS (0)
 #define MICROPY_PY_ALL_SPECIAL_METHODS (0)
@@ -156,6 +156,16 @@
 #define MICROPY_PY_TREZORIO         (1)
 #define MICROPY_PY_TREZORUI         (1)
 #define MICROPY_PY_TREZORUTILS      (1)
+#define MICROPY_PY_TREZORPROTO      (1)
+
+#ifdef SYSTEM_VIEW
+#define MP_PLAT_PRINT_STRN(str, len) segger_print(str, len)
+// uncomment DEST_RTT and comment DEST_SYSTEMVIEW
+// if you want to print to RTT instead of SystemView
+// OpenOCD supports only the RTT output method
+// #define SYSTEMVIEW_DEST_RTT         (1)
+#define SYSTEMVIEW_DEST_SYSTEMVIEW  (1)
+#endif
 
 #define MP_STATE_PORT MP_STATE_VM
 
@@ -170,14 +180,9 @@
 
 #define MP_SSIZE_MAX (0x0fffffff)
 
-#define UINT_FMT "%u"
-#define INT_FMT "%d"
-
 typedef int mp_int_t; // must be pointer size
 typedef unsigned int mp_uint_t; // must be pointer size
 typedef long mp_off_t;
-
-#define MP_PLAT_PRINT_STRN(str, len) mp_hal_stdout_tx_strn_cooked(str, len)
 
 #include "irq.h"
 
@@ -196,6 +201,9 @@ typedef long mp_off_t;
 #define malloc(n) m_malloc(n)
 #define free(p) m_free(p)
 #define realloc(p, n) m_realloc(p, n)
+
+#define MICROPY_PORT_ROOT_POINTERS \
+    mp_obj_t trezorconfig_ui_wait_callback; \
 
 // We need to provide a declaration/definition of alloca()
 #include <alloca.h>

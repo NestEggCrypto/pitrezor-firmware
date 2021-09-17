@@ -46,7 +46,7 @@ def set_autolock_delay(device_handler, delay_ms):
     debug.input("1234")
 
     layout = debug.wait_layout()
-    assert f"auto-lock your device after {delay_ms // 1000} seconds" in layout.text
+    assert f"auto-lock your device after  {delay_ms // 1000} seconds" in layout.text
     debug.click(buttons.OK)
 
     layout = debug.wait_layout()
@@ -62,7 +62,7 @@ def test_autolock_interrupts_signing(device_handler):
     # try to sign a transaction
     inp1 = messages.TxInputType(
         address_n=parse_path("44h/0h/0h/0/0"),
-        # amount=390000,
+        amount=390000,
         prev_hash=TXHASH_d5f65e,
         prev_index=0,
     )
@@ -79,7 +79,7 @@ def test_autolock_interrupts_signing(device_handler):
     assert "1MJ2tj2ThBE62zXbBYA5ZaN3fdve5CPAz1" in layout.text.replace(" ", "")
 
     layout = debug.click(buttons.OK, wait=True)
-    assert "Total amount: 0.0039 BTC" in layout.text
+    assert "Total amount:  0.0039 BTC" in layout.text
 
     # wait for autolock to kick in
     time.sleep(10.1)

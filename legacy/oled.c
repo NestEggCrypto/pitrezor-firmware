@@ -340,16 +340,25 @@ void oledDrawStringRight(int x, int y, const char *text, uint8_t font) {
   oledDrawString(x, y, text, font);
 }
 
-void oledDrawBitmap(int x, int y, const BITMAP *bmp) {
+static void oled_draw_bitmap_flip(int x, int y, const BITMAP *bmp, bool flip) {
   for (int i = 0; i < bmp->width; i++) {
+    int ii = flip ? (bmp->width - 1 - i) : i;
     for (int j = 0; j < bmp->height; j++) {
-      if (bmp->data[(i / 8) + j * bmp->width / 8] & (1 << (7 - i % 8))) {
+      if (bmp->data[(ii / 8) + j * bmp->width / 8] & (1 << (7 - ii % 8))) {
         oledDrawPixel(x + i, y + j);
       } else {
         oledClearPixel(x + i, y + j);
       }
     }
   }
+}
+
+void oledDrawBitmap(int x, int y, const BITMAP *bmp) {
+  oled_draw_bitmap_flip(x, y, bmp, false);
+}
+
+void oledDrawBitmapFlip(int x, int y, const BITMAP *bmp) {
+  oled_draw_bitmap_flip(x, y, bmp, true);
 }
 
 /*
@@ -410,7 +419,6 @@ void oledFrame(int x1, int y1, int x2, int y2) {
  * This clears the display.
  */
 void oledSwipeLeft(void) {
-#if !defined(PIZERO)
   for (int i = 0; i < OLED_WIDTH; i++) {
     for (int j = 0; j < OLED_HEIGHT / 8; j++) {
       for (int k = OLED_WIDTH - 1; k > 0; k--) {
@@ -420,23 +428,6 @@ void oledSwipeLeft(void) {
     }
     oledRefresh();
   }
-#else
-  for (int i = 0; i < OLED_WIDTH / 4; i++) {
-    for (int j = 0; j < OLED_HEIGHT / 8; j++) {
-      for (int k = OLED_WIDTH / 4 - 1; k > 0; k--) {
-        _oledbuffer[k * 4 + 3 + j * OLED_WIDTH] = _oledbuffer[k * 4 - 1 + j * OLED_WIDTH];
-        _oledbuffer[k * 4 + 2 + j * OLED_WIDTH] = _oledbuffer[k * 4 - 2 + j * OLED_WIDTH];
-        _oledbuffer[k * 4 + 1 + j * OLED_WIDTH] = _oledbuffer[k * 4 - 3 + j * OLED_WIDTH];
-        _oledbuffer[k * 4 + 0 + j * OLED_WIDTH] = _oledbuffer[k * 4 - 4 + j * OLED_WIDTH];
-      }
-      _oledbuffer[j * OLED_WIDTH] = 0;
-      _oledbuffer[j * OLED_WIDTH + 1] = 0;
-      _oledbuffer[j * OLED_WIDTH + 2] = 0;
-      _oledbuffer[j * OLED_WIDTH + 3] = 0;
-    }
-    oledRefresh();
-  }
-#endif
 }
 
 /*

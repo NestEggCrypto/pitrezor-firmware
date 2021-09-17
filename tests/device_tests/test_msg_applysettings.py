@@ -21,8 +21,8 @@ from trezorlib.tools import parse_path
 
 EXPECTED_RESPONSES_NOPIN = [
     messages.ButtonRequest(),
-    messages.Success(),
-    messages.Features(),
+    messages.Success,
+    messages.Features,
 ]
 EXPECTED_RESPONSES_PIN_T1 = [messages.PinMatrixRequest()] + EXPECTED_RESPONSES_NOPIN
 EXPECTED_RESPONSES_PIN_TT = [messages.ButtonRequest()] + EXPECTED_RESPONSES_NOPIN
@@ -48,6 +48,16 @@ class TestMsgApplysettings:
             device.apply_settings(client, label="new label")
 
         assert client.features.label == "new label"
+
+    @pytest.mark.skip_t1
+    def test_apply_settings_rotation(self, client):
+        assert client.features.display_rotation is None
+
+        with client:
+            _set_expected_responses(client)
+            device.apply_settings(client, display_rotation=270)
+
+        assert client.features.display_rotation == 270
 
     @pytest.mark.skip_t2
     def test_invalid_language(self, client):
@@ -141,7 +151,6 @@ class TestMsgApplysettings:
             b"TOIf\x80\x00\x80\x00~\x00\x00\x00\xed\xd2\xcb\r\x83@\x10D\xc1^.\xde#!\xac31\x99\x10\x8aC%\x14~\x16\x92Y9\x02WI3\x01<\xf5cI2d\x1es(\xe1[\xdbn\xba\xca\xe8s7\xa4\xd5\xd4\xb3\x13\xbdw\xf6:\xf3\xd1\xe7%\xc7]\xdd_\xb3\x9e\x9f\x9e\x9fN\xed\xaaE\xef\xdc\xcf$D\xa7\xa4X\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0OV",
         ],
     )
-    @pytest.mark.skip_ui
     @pytest.mark.skip_t1
     def test_apply_homescreen_toif_fail(self, client, toif_data):
         with pytest.raises(exceptions.TrezorFailure), client:
@@ -156,28 +165,35 @@ class TestMsgApplysettings:
             _set_expected_responses(client)
             device.apply_settings(client, homescreen=img)
 
-    @pytest.mark.skip_t1
     @pytest.mark.setup_client(pin=None)
     def test_safety_checks(self, client):
-        BAD_ADDRESS = parse_path("m/0")
+        def get_bad_address():
+            btc.get_address(client, "Bitcoin", parse_path("m/44'"), show_display=True)
+
+        assert client.features.safety_checks == messages.SafetyCheckLevel.Strict
 
         with pytest.raises(
             exceptions.TrezorFailure, match="Forbidden key path"
         ), client:
-            client.set_expected_responses([messages.Failure()])
-            btc.get_address(client, "Bitcoin", BAD_ADDRESS)
+            client.set_expected_responses([messages.Failure])
+            get_bad_address()
 
-        with client:
-            client.set_expected_responses(EXPECTED_RESPONSES_NOPIN)
-            device.apply_settings(
-                client, safety_checks=messages.SafetyCheckLevel.Prompt
+        if client.features.model != "1":
+            with client:
+                client.set_expected_responses(EXPECTED_RESPONSES_NOPIN)
+                device.apply_settings(
+                    client, safety_checks=messages.SafetyCheckLevel.PromptAlways
+                )
+
+            assert (
+                client.features.safety_checks == messages.SafetyCheckLevel.PromptAlways
             )
 
-        with client:
-            client.set_expected_responses(
-                [messages.ButtonRequest(), messages.Address()]
-            )
-            btc.get_address(client, "Bitcoin", BAD_ADDRESS)
+            with client:
+                client.set_expected_responses(
+                    [messages.ButtonRequest, messages.ButtonRequest, messages.Address]
+                )
+                get_bad_address()
 
         with client:
             client.set_expected_responses(EXPECTED_RESPONSES_NOPIN)
@@ -185,8 +201,85 @@ class TestMsgApplysettings:
                 client, safety_checks=messages.SafetyCheckLevel.Strict
             )
 
+        assert client.features.safety_checks == messages.SafetyCheckLevel.Strict
+
         with pytest.raises(
             exceptions.TrezorFailure, match="Forbidden key path"
         ), client:
-            client.set_expected_responses([messages.Failure()])
-            btc.get_address(client, "Bitcoin", BAD_ADDRESS)
+            client.set_expected_responses([messages.Failure])
+            get_bad_address()
+
+        with client:
+            client.set_expected_responses(EXPECTED_RESPONSES_NOPIN)
+            device.apply_settings(
+                client, safety_checks=messages.SafetyCheckLevel.PromptTemporarily
+            )
+
+        assert (
+            client.features.safety_checks == messages.SafetyCheckLevel.PromptTemporarily
+        )
+
+        with client:
+            client.set_expected_responses(
+                [messages.ButtonRequest, messages.ButtonRequest, messages.Address]
+            )
+            get_bad_address()
+
+    @pytest.mark.skip_t1
+    def test_experimental_features(self, client):
+        def experimental_call():
+            btc.authorize_coinjoin(
+                client,
+                coordinator="www.example.com",
+                max_total_fee=10010,
+                fee_per_anonymity=5000000,  # 0.005 %
+                n=parse_path("m/84'/1'/0'"),
+                coin_name="Testnet",
+                script_type=messages.InputScriptType.SPENDWITNESS,
+            )
+
+        assert client.features.experimental_features is None
+
+        # unlock
+        with client:
+            _set_expected_responses(client)
+            device.apply_settings(client, label="new label")
+
+        assert client.features.experimental_features
+
+        with client:
+            client.set_expected_responses(
+                [messages.ButtonRequest, messages.ButtonRequest, messages.Success]
+            )
+            experimental_call()
+
+        # relock and try again
+        client.lock()
+        with client:
+            client.use_pin_sequence([PIN4])
+            client.set_expected_responses(
+                [
+                    messages.ButtonRequest,
+                    messages.ButtonRequest,
+                    messages.ButtonRequest,
+                    messages.Success,
+                ]
+            )
+            experimental_call()
+
+        # unset experimental features
+        with client:
+            client.set_expected_responses([messages.Success, messages.Features])
+            device.apply_settings(client, experimental_features=False)
+
+        assert not client.features.experimental_features
+
+        with pytest.raises(exceptions.TrezorFailure, match="DataError"), client:
+            client.set_expected_responses([messages.Failure])
+            experimental_call()
+
+    @pytest.mark.setup_client(pin=None)
+    def test_label_too_long(self, client):
+        with pytest.raises(exceptions.TrezorFailure), client:
+            client.set_expected_responses([messages.Failure])
+            device.apply_settings(client, label="A" * 33)

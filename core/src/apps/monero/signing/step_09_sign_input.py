@@ -14,19 +14,14 @@ import gc
 
 from trezor import utils
 
-from apps.monero.layout import confirms
+from apps.monero import layout
 from apps.monero.xmr import crypto
 
 from .state import State
 
 if False:
-    from typing import List
-    from trezor.messages.MoneroTransactionSourceEntry import (
-        MoneroTransactionSourceEntry,
-    )
-    from trezor.messages.MoneroTransactionSignInputAck import (
-        MoneroTransactionSignInputAck,
-    )
+    from trezor.messages import MoneroTransactionSourceEntry
+    from trezor.messages import MoneroTransactionSignInputAck
 
 
 async def sign_input(
@@ -53,9 +48,7 @@ async def sign_input(
     :param orig_idx: original index of the src_entr before sorting (HMAC check)
     :return: Generated signature MGs[i]
     """
-    await confirms.transaction_step(
-        state, state.STEP_SIGN, state.current_input_index + 1
-    )
+    await layout.transaction_step(state, state.STEP_SIGN, state.current_input_index + 1)
 
     state.current_input_index += 1
     if state.last_step not in (state.STEP_ALL_OUT, state.STEP_SIGN):
@@ -174,6 +167,7 @@ async def sign_input(
     state.mem_trace(4, True)
 
     from apps.monero.xmr import mlsag
+    from apps.monero import signing
 
     mg_buffer = []
     ring_pubkeys = [x.key for x in src_entr.outputs if x]
@@ -182,7 +176,7 @@ async def sign_input(
 
     state.mem_trace(5, True)
 
-    if state.hard_fork and state.hard_fork >= 13:
+    if state.tx_type == signing.RctType.CLSAG:
         state.mem_trace("CLSAG")
         mlsag.generate_clsag_simple(
             state.full_message,
@@ -207,9 +201,7 @@ async def sign_input(
     del (CtKey, input_secret_key, pseudo_out_alpha, mlsag, ring_pubkeys)
     state.mem_trace(6, True)
 
-    from trezor.messages.MoneroTransactionSignInputAck import (
-        MoneroTransactionSignInputAck,
-    )
+    from trezor.messages import MoneroTransactionSignInputAck
 
     # Encrypt signature, reveal once protocol finishes OK
     if state.client_version >= 3:
@@ -224,7 +216,7 @@ async def sign_input(
     )
 
 
-def _protect_signature(state: State, mg_buffer: List[bytes]) -> List[bytes]:
+def _protect_signature(state: State, mg_buffer: list[bytes]) -> list[bytes]:
     """
     Encrypts the signature with keys derived from state.opening_key.
     After protocol finishes without error, opening_key is sent to the

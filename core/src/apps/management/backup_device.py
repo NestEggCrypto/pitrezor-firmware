@@ -1,10 +1,11 @@
 import storage
 import storage.device
 from trezor import wire
-from trezor.messages.Success import Success
+from trezor.messages import Success
 
 from apps.common import mnemonic
-from apps.management.reset_device import backup_seed, layout
+
+from .reset_device import backup_seed, layout
 
 
 async def backup_device(ctx, msg):

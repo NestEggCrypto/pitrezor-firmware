@@ -14,8 +14,6 @@
 # You should have received a copy of the License along with this library.
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
-import pytest
-
 from trezorlib import btc, messages
 from trezorlib.tools import parse_path
 
@@ -37,13 +35,12 @@ TXHASH_31bc1c = bytes.fromhex(
 )
 
 
-@pytest.mark.skip_ui
 def test_non_segwit_segwit_inputs(client):
     # First is non-segwit, second is segwit.
 
     inp1 = messages.TxInputType(
         address_n=parse_path("44'/1'/0'/0/0"),
-        # amount=31000000,
+        amount=31000000,
         prev_hash=TXHASH_e5040e,
         prev_index=0,
     )
@@ -80,7 +77,6 @@ def test_non_segwit_segwit_inputs(client):
     )
 
 
-@pytest.mark.skip_ui
 def test_segwit_non_segwit_inputs(client):
     # First is segwit, second is non-segwit.
 
@@ -93,7 +89,7 @@ def test_segwit_non_segwit_inputs(client):
     )
     inp2 = messages.TxInputType(
         address_n=parse_path("44'/1'/0'/0/0"),
-        # amount=31000000,
+        amount=31000000,
         prev_hash=TXHASH_e5040e,
         prev_index=0,
     )
@@ -123,7 +119,6 @@ def test_segwit_non_segwit_inputs(client):
     )
 
 
-@pytest.mark.skip_ui
 def test_segwit_non_segwit_segwit_inputs(client):
     # First is segwit, second is non-segwit and third is segwit again.
 
@@ -136,7 +131,7 @@ def test_segwit_non_segwit_segwit_inputs(client):
     )
     inp2 = messages.TxInputType(
         address_n=parse_path("44'/1'/0'/0/0"),
-        # amount=31000000,
+        amount=31000000,
         prev_hash=TXHASH_e5040e,
         prev_index=0,
     )
@@ -177,13 +172,12 @@ def test_segwit_non_segwit_segwit_inputs(client):
     )
 
 
-@pytest.mark.skip_ui
 def test_non_segwit_segwit_non_segwit_inputs(client):
     # First is non-segwit, second is segwit and third is non-segwit again.
 
     inp1 = messages.TxInputType(
         address_n=parse_path("44'/1'/0'/0/0"),
-        # amount=31000000,
+        amount=31000000,
         prev_hash=TXHASH_e5040e,
         prev_index=0,
     )
@@ -195,7 +189,10 @@ def test_non_segwit_segwit_non_segwit_inputs(client):
         script_type=messages.InputScriptType.SPENDWITNESS,
     )
     inp3 = messages.TxInputType(
-        address_n=parse_path("44'/1'/1'/0/0"), prev_hash=TXHASH_2bac7a, prev_index=0,
+        address_n=parse_path("44'/1'/1'/0/0"),
+        amount=9226912,
+        prev_hash=TXHASH_2bac7a,
+        prev_index=0,
     )
     out1 = messages.TxOutputType(
         address="tb1q54un3q39sf7e7tlfq99d6ezys7qgc62a6rxllc",

@@ -15,8 +15,11 @@
 # If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
 import logging
+import textwrap
 from collections import namedtuple
 from copy import deepcopy
+from enum import IntEnum
+from itertools import zip_longest
 
 from mnemonic import Mnemonic
 
@@ -121,7 +124,16 @@ class DebugLink:
         state = self._call(messages.DebugLinkGetState(wait_word_pos=True))
         return state.reset_word_pos
 
-    def input(self, word=None, button=None, swipe=None, x=None, y=None, wait=False):
+    def input(
+        self,
+        word=None,
+        button=None,
+        swipe=None,
+        x=None,
+        y=None,
+        wait=False,
+        hold_ms=None,
+    ):
         if not self.allow_interactions:
             return
 
@@ -130,7 +142,7 @@ class DebugLink:
             raise ValueError("Invalid input - must use one of word, button, swipe")
 
         decision = messages.DebugLinkDecision(
-            yes_no=button, swipe=swipe, input=word, x=x, y=y, wait=wait
+            yes_no=button, swipe=swipe, input=word, x=x, y=y, wait=wait, hold_ms=hold_ms
         )
         ret = self._call(decision, nowait=not wait)
         if ret is not None:
@@ -146,8 +158,8 @@ class DebugLink:
     def press_no(self):
         self.input(button=False)
 
-    def swipe_up(self):
-        self.input(swipe=messages.DebugSwipeDirection.UP)
+    def swipe_up(self, wait=False):
+        self.input(swipe=messages.DebugSwipeDirection.UP, wait=wait)
 
     def swipe_down(self):
         self.input(swipe=messages.DebugSwipeDirection.DOWN)
@@ -162,7 +174,7 @@ class DebugLink:
         self._call(messages.DebugLinkStop(), nowait=True)
 
     def reseed(self, value):
-        self._call(messages.DebugLinkReseedRandom(value=value))
+        return self._call(messages.DebugLinkReseedRandom(value=value))
 
     def start_recording(self, directory):
         self._call(messages.DebugLinkRecordScreen(target_directory=directory))
@@ -218,17 +230,20 @@ class DebugUI:
         self.passphrase = ""
         self.input_flow = None
 
-    def button_request(self, code):
+    def button_request(self, br):
         if self.input_flow is None:
-            if code == messages.ButtonRequestType.PinEntry:
+            if br.code == messages.ButtonRequestType.PinEntry:
                 self.debuglink.input(self.get_pin())
             else:
+                if br.pages is not None:
+                    for _ in range(br.pages - 1):
+                        self.debuglink.swipe_up(wait=True)
                 self.debuglink.press_yes()
         elif self.input_flow is self.INPUT_FLOW_DONE:
             raise AssertionError("input flow ended prematurely")
         else:
             try:
-                self.input_flow.send(code)
+                self.input_flow.send(br)
             except StopIteration:
                 self.input_flow = self.INPUT_FLOW_DONE
 
@@ -243,6 +258,96 @@ class DebugUI:
 
     def get_passphrase(self, available_on_device):
         return self.passphrase
+
+
+class MessageFilter:
+    def __init__(self, message_type, **fields):
+        self.message_type = message_type
+        self.fields = {}
+        self.update_fields(**fields)
+
+    def update_fields(self, **fields):
+        for name, value in fields.items():
+            try:
+                self.fields[name] = self.from_message_or_type(value)
+            except TypeError:
+                self.fields[name] = value
+
+        return self
+
+    @classmethod
+    def from_message_or_type(cls, message_or_type):
+        if isinstance(message_or_type, cls):
+            return message_or_type
+        if isinstance(message_or_type, protobuf.MessageType):
+            return cls.from_message(message_or_type)
+        if isinstance(message_or_type, type) and issubclass(
+            message_or_type, protobuf.MessageType
+        ):
+            return cls(message_or_type)
+        raise TypeError("Invalid kind of expected response")
+
+    @classmethod
+    def from_message(cls, message):
+        fields = {}
+        for field in message.FIELDS.values():
+            value = getattr(message, field.name)
+            if value in (None, [], protobuf.REQUIRED_FIELD_PLACEHOLDER):
+                continue
+            fields[field.name] = value
+        return cls(type(message), **fields)
+
+    def match(self, message):
+        if type(message) != self.message_type:
+            return False
+
+        for field, expected_value in self.fields.items():
+            actual_value = getattr(message, field, None)
+            if isinstance(expected_value, MessageFilter):
+                if not expected_value.match(actual_value):
+                    return False
+            elif expected_value != actual_value:
+                return False
+
+        return True
+
+    def format(self, maxwidth=80):
+        fields = []
+        for field in self.message_type.FIELDS.values():
+            if field.name not in self.fields:
+                continue
+            value = self.fields[field.name]
+            if isinstance(value, IntEnum):
+                field_str = value.name
+            elif isinstance(value, MessageFilter):
+                field_str = value.format(maxwidth - 4)
+            elif isinstance(value, protobuf.MessageType):
+                field_str = protobuf.format_message(value)
+            else:
+                field_str = repr(value)
+            field_str = textwrap.indent(field_str, "    ").lstrip()
+            fields.append((field.name, field_str))
+
+        pairs = ["{}={}".format(k, v) for k, v in fields]
+        oneline_str = ", ".join(pairs)
+        if len(oneline_str) < maxwidth:
+            return "{}({})".format(self.message_type.__name__, oneline_str)
+        else:
+            item = []
+            item.append("{}(".format(self.message_type.__name__))
+            for pair in pairs:
+                item.append("    {}".format(pair))
+            item.append(")")
+            return "\n".join(item)
+
+
+class MessageFilterGenerator:
+    def __getattr__(self, key):
+        message_type = getattr(messages, key)
+        return MessageFilter(message_type).update_fields
+
+
+message_filters = MessageFilterGenerator()
 
 
 class TrezorClientDebugLink(TrezorClient):
@@ -278,7 +383,7 @@ class TrezorClientDebugLink(TrezorClient):
 
         # Do not expect any specific response from device
         self.expected_responses = None
-        self.current_response = None
+        self.actual_responses = None
 
         super().__init__(transport, ui=self.ui)
 
@@ -363,31 +468,27 @@ class TrezorClientDebugLink(TrezorClient):
     def __enter__(self):
         # For usage in with/expected_responses
         self.in_with_statement += 1
+        if self.in_with_statement > 1:
+            raise RuntimeError("Do not nest!")
         return self
 
     def __exit__(self, _type, value, traceback):
+        __tracebackhide__ = True  # for pytest # pylint: disable=W0612
+
         self.in_with_statement -= 1
+        self.ui.clear()
+        self.watch_layout(False)
 
-        # Clear input flow.
+        if _type is not None:
+            # Another exception raised
+            return False
+
         try:
-            if _type is not None:
-                # Another exception raised
-                return False
-
-            if self.expected_responses is None:
-                # no need to check anything else
-                return False
-
             # Evaluate missed responses in 'with' statement
-            if self.current_response < len(self.expected_responses):
-                self._raise_unexpected_response(None)
-
+            self._verify_responses(self.expected_responses, self.actual_responses)
         finally:
-            # Cleanup
             self.expected_responses = None
-            self.current_response = None
-            self.ui.clear()
-            self.watch_layout(False)
+            self.actual_responses = None
 
         return False
 
@@ -417,16 +518,17 @@ class TrezorClientDebugLink(TrezorClient):
             raise RuntimeError("Must be called inside 'with' statement")
 
         # make sure all items are (bool, message) tuples
-        expected_with_validity = [
+        expected_with_validity = (
             e if isinstance(e, tuple) else (True, e) for e in expected
-        ]
+        )
 
         # only apply those items that are (True, message)
         self.expected_responses = [
-            expected for valid, expected in expected_with_validity if valid
+            MessageFilter.from_message_or_type(expected)
+            for valid, expected in expected_with_validity
+            if valid
         ]
-
-        self.current_response = 0
+        self.actual_responses = []
 
     def use_pin_sequence(self, pins):
         """Respond to PIN prompts from device with the provided PINs.
@@ -446,95 +548,59 @@ class TrezorClientDebugLink(TrezorClient):
     def _raw_read(self):
         __tracebackhide__ = True  # for pytest # pylint: disable=W0612
 
-        # if SCREENSHOT and self.debug:
-        #     from PIL import Image
-
-        #     layout = self.debug.state().layout
-        #     im = Image.new("RGB", (128, 64))
-        #     pix = im.load()
-        #     for x in range(128):
-        #         for y in range(64):
-        #             rx, ry = 127 - x, 63 - y
-        #             if (ord(layout[rx + (ry / 8) * 128]) & (1 << (ry % 8))) > 0:
-        #                 pix[x, y] = (255, 255, 255)
-        #     im.save("scr%05d.png" % self.screenshot_id)
-        #     self.screenshot_id += 1
-
         resp = super()._raw_read()
         resp = self._filter_message(resp)
-        self._check_request(resp)
+        if self.actual_responses is not None:
+            self.actual_responses.append(resp)
         return resp
 
     def _raw_write(self, msg):
         return super()._raw_write(self._filter_message(msg))
 
-    def _raise_unexpected_response(self, msg):
-        __tracebackhide__ = True  # for pytest # pylint: disable=W0612
-
-        start_at = max(self.current_response - EXPECTED_RESPONSES_CONTEXT_LINES, 0)
-        stop_at = min(
-            self.current_response + EXPECTED_RESPONSES_CONTEXT_LINES + 1,
-            len(self.expected_responses),
-        )
+    def _expectation_lines(self, expected, current):
+        start_at = max(current - EXPECTED_RESPONSES_CONTEXT_LINES, 0)
+        stop_at = min(current + EXPECTED_RESPONSES_CONTEXT_LINES + 1, len(expected))
         output = []
         output.append("Expected responses:")
         if start_at > 0:
-            output.append("    (...{} previous responses omitted)".format(start_at))
+            output.append(f"    (...{start_at} previous responses omitted)")
         for i in range(start_at, stop_at):
-            exp = self.expected_responses[i]
-            prefix = "    " if i != self.current_response else ">>> "
-            set_fields = {
-                key: value
-                for key, value in exp.__dict__.items()
-                if value is not None and value != []
-            }
-            oneline_str = ", ".join("{}={!r}".format(*i) for i in set_fields.items())
-            if len(oneline_str) < 60:
-                output.append(
-                    "{}{}({})".format(prefix, exp.__class__.__name__, oneline_str)
-                )
-            else:
-                item = []
-                item.append("{}{}(".format(prefix, exp.__class__.__name__))
-                for key, value in set_fields.items():
-                    item.append("{}    {}={!r}".format(prefix, key, value))
-                item.append("{})".format(prefix))
-                output.append("\n".join(item))
-        if stop_at < len(self.expected_responses):
-            omitted = len(self.expected_responses) - stop_at
-            output.append("    (...{} following responses omitted)".format(omitted))
+            exp = expected[i]
+            prefix = "    " if i != current else ">>> "
+            output.append(textwrap.indent(exp.format(), prefix))
+        if stop_at < len(expected):
+            omitted = len(expected) - stop_at
+            output.append(f"    (...{omitted} following responses omitted)")
 
         output.append("")
-        if msg is not None:
-            output.append("Actually received:")
-            output.append(protobuf.format_message(msg))
-        else:
-            output.append("This message was never received.")
-        raise AssertionError("\n".join(output))
+        return output
 
-    def _check_request(self, msg):
+    def _verify_responses(self, expected, actual):
         __tracebackhide__ = True  # for pytest # pylint: disable=W0612
-        if self.expected_responses is None:
+
+        if expected is None and actual is None:
             return
 
-        if self.current_response >= len(self.expected_responses):
-            raise AssertionError(
-                "No more messages were expected, but we got:\n"
-                + protobuf.format_message(msg)
-            )
+        for i, (exp, act) in enumerate(zip_longest(expected, actual)):
+            if exp is None:
+                output = self._expectation_lines(expected, i)
+                output.append("No more messages were expected, but we got:")
+                for resp in actual[i:]:
+                    output.append(
+                        textwrap.indent(protobuf.format_message(resp), "    ")
+                    )
+                raise AssertionError("\n".join(output))
 
-        expected = self.expected_responses[self.current_response]
+            if act is None:
+                output = self._expectation_lines(expected, i)
+                output.append("This and the following message was not received.")
+                raise AssertionError("\n".join(output))
 
-        if msg.__class__ != expected.__class__:
-            self._raise_unexpected_response(msg)
-
-        for field, value in expected.__dict__.items():
-            if value is None or value == []:
-                continue
-            if getattr(msg, field) != value:
-                self._raise_unexpected_response(msg)
-
-        self.current_response += 1
+            if not exp.match(act):
+                output = self._expectation_lines(expected, i)
+                output.append("Actually received:")
+                output.append(textwrap.indent(protobuf.format_message(act), "    "))
+                raise AssertionError("\n".join(output))
 
     def mnemonic_callback(self, _):
         word, pos = self.debug.read_recovery_word()
@@ -598,18 +664,3 @@ def self_test(client):
             payload=b"\x00\xFF\x55\xAA\x66\x99\x33\xCCABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!\x00\xFF\x55\xAA\x66\x99\x33\xCC"
         )
     )
-
-
-@expect(messages.Success, field="message")
-def show_text(client, header_text, body_text, icon=None, icon_color=None):
-    body_text = [
-        messages.DebugLinkShowTextItem(style=style, content=content)
-        for style, content in body_text
-    ]
-    msg = messages.DebugLinkShowText(
-        header_text=header_text,
-        body_text=body_text,
-        header_icon=icon,
-        icon_color=icon_color,
-    )
-    return client.call(msg)

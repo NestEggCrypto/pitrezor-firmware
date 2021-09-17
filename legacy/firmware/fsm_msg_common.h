@@ -20,11 +20,8 @@
 bool get_features(Features *resp) {
   resp->has_vendor = true;
   strlcpy(resp->vendor, "trezor.io", sizeof(resp->vendor));
-  resp->has_major_version = true;
   resp->major_version = VERSION_MAJOR;
-  resp->has_minor_version = true;
   resp->minor_version = VERSION_MINOR;
-  resp->has_patch_version = true;
   resp->patch_version = VERSION_PATCH;
   resp->has_device_id = true;
   strlcpy(resp->device_id, config_uuid_str, sizeof(resp->device_id));
@@ -59,9 +56,13 @@ bool get_features(Features *resp) {
   resp->has_flags = config_getFlags(&(resp->flags));
   resp->has_model = true;
   strlcpy(resp->model, "1", sizeof(resp->model));
+  resp->has_safety_checks = true;
+  resp->safety_checks = config_getSafetyCheckLevel();
   if (session_isUnlocked()) {
     resp->has_wipe_code_protection = true;
     resp->wipe_code_protection = config_hasWipeCode();
+    resp->has_auto_lock_delay_ms = true;
+    resp->auto_lock_delay_ms = config_getAutoLockDelayMs();
   }
 
 #if BITCOIN_ONLY
@@ -354,8 +355,8 @@ void fsm_msgLockDevice(const LockDevice *msg) {
 
 void fsm_msgEndSession(const EndSession *msg) {
   (void)msg;
-  // TODO
-  fsm_sendFailure(FailureType_Failure_FirmwareError, "Not implemented");
+  session_endCurrentSession();
+  fsm_sendSuccess(_("Session ended"));
 }
 
 void fsm_msgApplySettings(const ApplySettings *msg) {
@@ -364,7 +365,8 @@ void fsm_msgApplySettings(const ApplySettings *msg) {
       _("This firmware is incapable of passphrase entry on the device."));
 
   CHECK_PARAM(msg->has_label || msg->has_language || msg->has_use_passphrase ||
-                  msg->has_homescreen || msg->has_auto_lock_delay_ms,
+                  msg->has_homescreen || msg->has_auto_lock_delay_ms ||
+                  msg->has_safety_checks,
               _("No setting provided"));
 
   CHECK_PIN
@@ -433,6 +435,23 @@ void fsm_msgApplySettings(const ApplySettings *msg) {
     }
   }
 
+  if (msg->has_safety_checks) {
+    if (msg->safety_checks == SafetyCheckLevel_Strict ||
+        msg->safety_checks == SafetyCheckLevel_PromptTemporarily) {
+      layoutConfirmSafetyChecks(msg->safety_checks);
+      if (!protectButton(ButtonRequestType_ButtonRequest_ProtectCall, false)) {
+        fsm_sendFailure(FailureType_Failure_ActionCancelled, NULL);
+        layoutHome();
+        return;
+      }
+    } else {
+      fsm_sendFailure(FailureType_Failure_ProcessError,
+                      _("Unsupported safety-checks setting"));
+      layoutHome();
+      return;
+    }
+  }
+
   if (msg->has_label) {
     config_setLabel(msg->label);
   }
@@ -447,6 +466,9 @@ void fsm_msgApplySettings(const ApplySettings *msg) {
   }
   if (msg->has_auto_lock_delay_ms) {
     config_setAutoLockDelayMs(msg->auto_lock_delay_ms);
+  }
+  if (msg->has_safety_checks) {
+    config_setSafetyCheckLevel(msg->safety_checks);
   }
   fsm_sendSuccess(_("Settings applied"));
   layoutHome();

@@ -7,8 +7,10 @@
 
 from micropython import const
 
-from trezor.messages import InputScriptType
-from trezor.messages.TxInputType import TxInputType
+from trezor.enums import InputScriptType
+
+if False:
+    from trezor.messages import TxInput
 
 # transaction header size: 4 byte version
 _TXSIZE_HEADER = const(4)
@@ -50,7 +52,7 @@ class TxWeightCalculator:
             self.counter += self.ser_length_size(self.inputs_count)
             self.segwit = True
 
-    def add_input(self, i: TxInputType) -> None:
+    def add_input(self, i: TxInput) -> None:
 
         if i.multisig:
             multisig_script_size = _TXSIZE_MULTISIGSCRIPT + len(i.multisig.pubkeys) * (
@@ -99,7 +101,7 @@ class TxWeightCalculator:
     def ser_length_size(length: int) -> int:
         if length < 253:
             return 1
-        if length < 0x10000:
+        if length < 0x1_0000:
             return 3
         return 5
 
@@ -109,6 +111,6 @@ class TxWeightCalculator:
             return 1
         if length < 0x100:
             return 2
-        if length < 0x10000:
+        if length < 0x1_0000:
             return 3
         return 5

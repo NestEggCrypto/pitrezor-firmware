@@ -8,22 +8,19 @@ import gc
 
 from trezor import utils
 
-from apps.monero.layout import confirms
-from apps.monero.signing import RctType
+from apps.monero import layout
 from apps.monero.xmr import crypto
 
 from .state import State
 
 if False:
-    from trezor.messages.MoneroTransactionAllOutSetAck import (
-        MoneroTransactionAllOutSetAck,
-    )
+    from trezor.messages import MoneroTransactionAllOutSetAck
 
 
 async def all_outputs_set(state: State) -> MoneroTransactionAllOutSetAck:
     state.mem_trace(0)
 
-    await confirms.transaction_step(state, state.STEP_ALL_OUT)
+    await layout.transaction_step(state, state.STEP_ALL_OUT)
     state.mem_trace(1)
 
     _validate(state)
@@ -49,14 +46,14 @@ async def all_outputs_set(state: State) -> MoneroTransactionAllOutSetAck:
     # transaction prefix matches expected transaction prefix sent in the
     # init step.
 
-    from trezor.messages.MoneroRingCtSig import MoneroRingCtSig
-    from trezor.messages.MoneroTransactionAllOutSetAck import (
-        MoneroTransactionAllOutSetAck,
-    )
+    from trezor.messages import MoneroRingCtSig
+    from trezor.messages import MoneroTransactionAllOutSetAck
 
     # Initializes RCTsig structure (fee, tx prefix hash, type)
     rv_pb = MoneroRingCtSig(
-        txn_fee=state.fee, message=state.tx_prefix_hash, rv_type=RctType.Bulletproof2,
+        txn_fee=state.fee,
+        message=state.tx_prefix_hash,
+        rv_type=state.tx_type,
     )
 
     _out_pk(state)

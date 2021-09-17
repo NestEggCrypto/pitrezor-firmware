@@ -4,7 +4,68 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## 1.9.3 [to be released on 2nd September 2020]
+## 1.10.2 [14th July 2021]
+
+### Removed
+- Removed support for Firo  [#1647]
+- Removed support for Hatch  [#1650]
+
+### Fixed
+- Allow non-standard paths used by Unchained Capital, Green Address and Casa.  [#1660]
+
+### Security
+- Ensure that all testnet coins use SLIP-44 coin type 1.
+- Restrict BIP-45 paths to Bitcoin and coins with strong replay protection.
+- Don't show addresses that have an unrecognized path.
+- Disable all testnet coins from accessing Bitcoin paths.
+- Restrict the BIP-32 path ranges of `account`, `change` and `address_index` fields.
+- Fix operation source account encoding in Stellar.
+
+
+## 1.10.1 [9th June 2021]
+
+### Added
+- Safety checks setting in T1.  [#1627]
+
+### Security
+- Fix incorrect empty string handling in BLAKE implementation used by Decred.
+
+
+## 1.10.0 [12th May 2021]
+
+### Added
+- Public key to ECDHSessionKey.  [#1518]
+
+### Changed
+- Support long PIN of up to 50 digits.  [#1167]
+- Included bootloader 1.10.0.  [#1461]
+- Allow decreasing the output value in RBF transactions.  [#1491]
+- Display nLockTime in human-readable form.  [#1549]
+
+
+## 1.9.4 [10th February 2021]
+
+### Added
+- Replacement transaction signing for replace-by-fee.  [#1367]
+- Support for Output Descriptors export.  [#1363]
+- Show Ypub/Zpub correctly for multisig GetAddress.  [#1415]
+- Show amounts in mBTC, uBTC and sat denominations.  [#1369]
+
+### Changed
+- Bump nanopb dependency to 0.4.3.  [#1105]
+- Bump nanopb dependency to 0.4.4.  [#1402]
+- Minimum auto-lock delay to 1 minute. The former value of 10 seconds still applies for debug builds.  [#1351]
+
+### Deprecated
+
+### Removed
+- PIVX support.
+
+### Fixed
+
+### Security
+
+## 1.9.3 [2nd September 2020]
 
 ### Added
 - XVG support.  [#1165]
@@ -17,7 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Deprecated
 
 ### Removed
-- ETP, GIN, PTC, ZEL support
+- ETP, GIN, PTC, ZEL support.
 
 ### Fixed
 
@@ -333,5 +394,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 [#965]: https://github.com/trezor/trezor-firmware/issues/965
 [#1030]: https://github.com/trezor/trezor-firmware/issues/1030
 [#1098]: https://github.com/trezor/trezor-firmware/issues/1098
+[#1105]: https://github.com/trezor/trezor-firmware/issues/1105
 [#1165]: https://github.com/trezor/trezor-firmware/pull/1165
+[#1167]: https://github.com/trezor/trezor-firmware/issues/1167
 [#1188]: https://github.com/trezor/trezor-firmware/issues/1188
+[#1351]: https://github.com/trezor/trezor-firmware/issues/1351
+[#1363]: https://github.com/trezor/trezor-firmware/pull/1363
+[#1367]: https://github.com/trezor/trezor-firmware/issues/1367
+[#1369]: https://github.com/trezor/trezor-firmware/pull/1369
+[#1402]: https://github.com/trezor/trezor-firmware/pull/1402
+[#1415]: https://github.com/trezor/trezor-firmware/pull/1415
+[#1461]: https://github.com/trezor/trezor-firmware/issues/1461
+[#1491]: https://github.com/trezor/trezor-firmware/issues/1491
+[#1518]: https://github.com/trezor/trezor-firmware/issues/1518
+[#1549]: https://github.com/trezor/trezor-firmware/issues/1549
+[#1627]: https://github.com/trezor/trezor-firmware/issues/1627
+[#1647]: https://github.com/trezor/trezor-firmware/issues/1647
+[#1650]: https://github.com/trezor/trezor-firmware/issues/1650
+[#1660]: https://github.com/trezor/trezor-firmware/issues/1660

@@ -29,6 +29,7 @@ LOG = logging.getLogger(__name__)
 
 VENDORS = ("bitcointrezor.com", "trezor.io")
 MAX_PASSPHRASE_LENGTH = 50
+MAX_PIN_LENGTH = 50
 
 PASSPHRASE_ON_DEVICE = object()
 PASSPHRASE_TEST_PATH = tools.parse_path("44h/1h/0h/0/0")
@@ -36,7 +37,7 @@ PASSPHRASE_TEST_PATH = tools.parse_path("44h/1h/0h/0/0")
 OUTDATED_FIRMWARE_ERROR = """
 Your Trezor firmware is out of date. Update it with the following command:
   trezorctl firmware-update
-Or visit https://wallet.trezor.io/
+Or visit https://suite.trezor.io/
 """.strip()
 
 
@@ -83,14 +84,17 @@ class TrezorClient:
     """
 
     def __init__(
-        self, transport, ui, session_id=None,
+        self,
+        transport,
+        ui,
+        session_id=None,
     ):
         LOG.info("creating client instance for device: {}".format(transport.get_path()))
         self.transport = transport
         self.ui = ui
-        self.session_id = session_id
         self.session_counter = 0
-        self.init_device()
+        self.session_id = session_id
+        self.init_device(session_id=session_id)
 
     def open(self):
         if self.session_counter == 0:
@@ -149,7 +153,9 @@ class TrezorClient:
             self.call_raw(messages.Cancel())
             raise
 
-        if any(d not in "123456789" for d in pin) or not (1 <= len(pin) <= 9):
+        if any(d not in "123456789" for d in pin) or not (
+            1 <= len(pin) <= MAX_PIN_LENGTH
+        ):
             self.call_raw(messages.Cancel())
             raise ValueError("Invalid PIN provided")
 
@@ -203,7 +209,7 @@ class TrezorClient:
         __tracebackhide__ = True  # for pytest # pylint: disable=W0612
         # do this raw - send ButtonAck first, notify UI later
         self._raw_write(messages.ButtonAck())
-        self.ui.button_request(msg.code)
+        self.ui.button_request(msg)
         return self._raw_read()
 
     @tools.session
@@ -294,6 +300,11 @@ class TrezorClient:
         if not isinstance(resp, messages.Features):
             raise exceptions.TrezorException("Unexpected response to Initialize")
 
+        if self.session_id is not None and resp.session_id == self.session_id:
+            LOG.info("Successfully resumed session")
+        elif session_id is not None:
+            LOG.info("Failed to resume session")
+
         # TT < 2.3.0 compatibility:
         # _refresh_features will clear out the session_id field. We want this function
         # to return its value, so that callers can rely on it being either a valid
@@ -321,7 +332,9 @@ class TrezorClient:
 
     @tools.expect(messages.Success, field="message")
     def ping(
-        self, msg, button_protection=False,
+        self,
+        msg,
+        button_protection=False,
     ):
         # We would like ping to work on any valid TrezorClient instance, but
         # due to the protection modes, we need to go through self.call, and that will
@@ -340,14 +353,14 @@ class TrezorClient:
             finally:
                 self.close()
 
-        msg = messages.Ping(message=msg, button_protection=button_protection,)
+        msg = messages.Ping(message=msg, button_protection=button_protection)
         return self.call(msg)
 
     def get_device_id(self):
         return self.features.device_id
 
     @tools.session
-    def lock(self):
+    def lock(self, *, _refresh_features=True):
         """Lock the device.
 
         If the device does not have a PIN configured, this will do nothing.
@@ -360,8 +373,12 @@ class TrezorClient:
         To invalidate passphrase cache, use `end_session()`. To lock _and_ invalidate
         passphrase cache, use `clear_session()`.
         """
+        # Private argument _refresh_features can be used internally to avoid
+        # refreshing in cases where we will refresh soon anyway. This is used
+        # in TrezorClient.clear_session()
         self.call(messages.LockDevice())
-        self.refresh_features()
+        if _refresh_features:
+            self.refresh_features()
 
     @tools.session
     def ensure_unlocked(self):
@@ -384,8 +401,18 @@ class TrezorClient:
 
         The session will become invalid until `init_device()` is called again.
         If passphrase is enabled, further actions will prompt for it again.
+
+        This is a no-op in bootloader mode, as it does not support session management.
         """
-        # XXX self.call(messages.EndSession())
+        # since: 2.3.4, 1.9.4
+        try:
+            if not self.features.bootloader_mode:
+                self.call(messages.EndSession())
+        except exceptions.TrezorFailure:
+            # A failure most likely means that the FW version does not support
+            # the EndSession call. We ignore the failure and clear the local session_id.
+            # The client-side end result is identical.
+            pass
         self.session_id = None
 
     @tools.session
@@ -397,7 +424,6 @@ class TrezorClient:
 
         Equivalent to calling `lock()`, `end_session()` and `init_device()`.
         """
-        # call LockDevice manually to save one refresh_features() call
-        self.call(messages.LockDevice())
+        self.lock(_refresh_features=False)
         self.end_session()
-        self.init_device()
+        self.init_device(new_session=True)

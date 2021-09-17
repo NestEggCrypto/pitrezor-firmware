@@ -26,6 +26,9 @@ from .signtx import request_finished, request_input, request_meta, request_outpu
 
 B = proto.ButtonRequestType
 TX_API = TxCache("Testnet")
+# NOTE: This test case was migrated from Testnet to Bitcoin, because we
+# disabled testnet for BIP-45 paths. So we are still using the Testnet TxCache
+# here, but everything else has been changed to Bitcoin mainnet.
 
 TXHASH_16c6c8 = bytes.fromhex(
     "16c6c8471b8db7a628f2b2bb86bfeefae1766463ce8692438c7fd3fce3f43ce5"
@@ -40,25 +43,25 @@ TXHASH_b0946d = bytes.fromhex(
 
 class TestMultisigChange:
     node_ext1 = bip32.deserialize(
-        "tpubDADHV9u9Y6gkggintTdMjJE3be58zKNLhpxBQyuEM6Pwx3sN9JVLmMCMN4DNVwL9AKec27z5TaWcWuHzMXiGAtcra5DjwWbvppGX4gaEGVN"
+        "xpub69qexv5TppjJQtXwSGeGXNtgGWyUzvsHACMt4Rr61Be4CmCf55eFcuXX828aySNuNR7hQYUCvUgZpioNxfs2HTAZWUUSFywhErg7JfTPv3Y"
     )
     # m/1 => 02c0d0c5fee952620757c6128dbf327c996cd72ed3358d15d6518a1186099bc15e
     # m/2 => 0375b9dfaad928ce1a7eed88df7c084e67d99e9ab74332419458a9a45779706801
 
     node_ext2 = bip32.deserialize(
-        "tpubDADHV9u9Y6gkhWXBmDJ6TUhZajLWjvKukRe2w9FfhdbQpUux8Z8jnPHNAZqFRgHPg9sR7YR93xThM32M7NfRu8S5WyDtext7S62sqxeJNkd"
+        "xpub69qexv5TppjJRiLLK2K1FZNCFcErkXprCo3jabCXMiqX5CFF4LHedwcXvXkTuBL9tFLWVxuGWrdeerXjiWpC1gynTNUaySDsr8SU5xMpj5R"
     )
     # m/1 => 0388460dc439f4c8f5bcfc268c36e11b4375cad5c3535c336cfdf8c32c3afad5c1
     # m/2 => 03a04f945d5a3685729dde697d574076de4bdf38e904f813b22a851548e1110fc0
 
     node_ext3 = bip32.deserialize(
-        "tpubDADHV9u9Y6gkmM5ohWRGTswrc6fr7soH7e2D2ic5a86PDUaHc5Ln9EbER69cEr5bDZPa7EXguJ1MhWVzPZpZWVdG5fvoF3hfirXvRbpCCBg"
+        "xpub69qexv5TppjJVYtxFKSBFxcVGyaC8VJDa1RugAYwEDLVUBuaXrVgznvQB44piM8MRerfVf1pNCBK1L1NzhyKd4Ay25BVZX3S8twWfZDxmz7"
     )
     # m/1 => 02e0c21e2a7cf00b94c5421725acff97f9826598b91f2340c5ddda730caca7d648
     # m/2 => 03928301ffb8c0d7a364b794914c716ba3107cc78a6fe581028b0d8638b22e8573
 
     node_int = bip32.deserialize(
-        "tpubDADHV9u9Y6gke2Vw3rWE8KRXmeK8PTtsF5B3Cqjo6h3SoiyRtzxjnDVG1knxrqB8BpP1dMAd6MR3Ps5UXibiFDtQuWVPXLkJ3HvttZYbH12"
+        "xpub69qexv5TppjJNEK5bfX8vQ6ASXDUQ5PohSajrHgeknHZ4SJipn7edmpRmiiBLLDtPur71mekZFazhgas8rkUMnS7quk5qp64TLLV8ShrxZJ"
     )
     # m/1 => 03f91460d79e4e463d7d90cb75254bcd62b515a99a950574c721efdc5f711dff35
     # m/2 => 038caebd6f753bbbd2bb1f3346a43cd32140648583673a31d62f2dfb56ad0ab9e3
@@ -105,6 +108,7 @@ class TestMultisigChange:
     # 2N9W4z9AhAPaHghtqVQPbaTAGHdbrhKeBQw
     inp1 = proto.TxInputType(
         address_n=[H_(45), 0, 0, 0],
+        amount=50000000,
         prev_hash=TXHASH_16c6c8,
         prev_index=1,
         script_type=proto.InputScriptType.SPENDMULTISIG,
@@ -114,6 +118,7 @@ class TestMultisigChange:
     # 2NDBG6QXQLtnQ3jRGkrqo53BiCeXfQXLdj4
     inp2 = proto.TxInputType(
         address_n=[H_(45), 0, 0, 1],
+        amount=34500000,
         prev_hash=TXHASH_d80c34,
         prev_index=0,
         script_type=proto.InputScriptType.SPENDMULTISIG,
@@ -123,6 +128,7 @@ class TestMultisigChange:
     # 2MvwPWfp2XPU3S1cMwgEMKBPUw38VP5SBE4
     inp3 = proto.TxInputType(
         address_n=[H_(45), 0, 0, 1],
+        amount=55500000,
         prev_hash=TXHASH_b0946d,
         prev_index=0,
         script_type=proto.InputScriptType.SPENDMULTISIG,
@@ -131,6 +137,17 @@ class TestMultisigChange:
 
     def _responses(self, inp1, inp2, change=0):
         resp = [
+            request_input(0),
+            request_input(1),
+            request_output(0),
+        ]
+        if change != 1:
+            resp.append(proto.ButtonRequest(code=B.ConfirmOutput))
+        resp.append(request_output(1))
+        if change != 2:
+            resp.append(proto.ButtonRequest(code=B.ConfirmOutput))
+        resp += [
+            proto.ButtonRequest(code=B.SignTx),
             request_input(0),
             request_meta(inp1.prev_hash),
             request_input(0, inp1.prev_hash),
@@ -141,15 +158,6 @@ class TestMultisigChange:
             request_input(0, inp2.prev_hash),
             request_output(0, inp2.prev_hash),
             request_output(1, inp2.prev_hash),
-            request_output(0),
-        ]
-        if change != 1:
-            resp.append(proto.ButtonRequest(code=B.ConfirmOutput))
-        resp.append(request_output(1))
-        if change != 2:
-            resp.append(proto.ButtonRequest(code=B.ConfirmOutput))
-        resp += [
-            proto.ButtonRequest(code=B.SignTx),
             request_input(0),
             request_input(1),
             request_output(0),
@@ -169,13 +177,13 @@ class TestMultisigChange:
     @pytest.mark.setup_client(mnemonic=MNEMONIC12)
     def test_external_external(self, client):
         out1 = proto.TxOutputType(
-            address="muevUcG1Bb8eM2nGUGhqmeujHRX7YXjSEu",
+            address="1F8yBZB2NZhPZvJekhjTwjhQRRvQeTjjXr",
             amount=40000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
 
         out2 = proto.TxOutputType(
-            address="mwdrpMVSJxxsM8f8xbnCHn9ERaRT1NG1UX",
+            address="1H7uXJQTVwXca2BXF2opTrvuZapk8Cm8zY",
             amount=44000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -184,7 +192,7 @@ class TestMultisigChange:
             client.set_expected_responses(self._responses(self.inp1, self.inp2))
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -200,7 +208,7 @@ class TestMultisigChange:
     @pytest.mark.setup_client(mnemonic=MNEMONIC12)
     def test_external_internal(self, client):
         out1 = proto.TxOutputType(
-            address="muevUcG1Bb8eM2nGUGhqmeujHRX7YXjSEu",
+            address="1F8yBZB2NZhPZvJekhjTwjhQRRvQeTjjXr",
             amount=40000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -217,7 +225,7 @@ class TestMultisigChange:
             )
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -239,7 +247,7 @@ class TestMultisigChange:
         )
 
         out2 = proto.TxOutputType(
-            address="mwdrpMVSJxxsM8f8xbnCHn9ERaRT1NG1UX",
+            address="1H7uXJQTVwXca2BXF2opTrvuZapk8Cm8zY",
             amount=44000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -250,7 +258,7 @@ class TestMultisigChange:
             )
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -266,13 +274,13 @@ class TestMultisigChange:
     @pytest.mark.setup_client(mnemonic=MNEMONIC12)
     def test_multisig_external_external(self, client):
         out1 = proto.TxOutputType(
-            address="2N2aFoogGntQFFwdUVPfRmutXD22ThcNTsR",
+            address="3B23k4kFBRtu49zvpG3Z9xuFzfpHvxBcwt",
             amount=40000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
 
         out2 = proto.TxOutputType(
-            address="2NFJjQcU8mw4Z3ywpbek8HL1VoJ27GDrkHw",
+            address="3PkXLsY7AUZCrCKGvX8FfP2EawowUBMbcg",
             amount=44000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -281,7 +289,7 @@ class TestMultisigChange:
             client.set_expected_responses(self._responses(self.inp1, self.inp2))
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -311,7 +319,7 @@ class TestMultisigChange:
         )
 
         out2 = proto.TxOutputType(
-            address="2NFJjQcU8mw4Z3ywpbek8HL1VoJ27GDrkHw",
+            address="3PkXLsY7AUZCrCKGvX8FfP2EawowUBMbcg",
             amount=44000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -322,7 +330,7 @@ class TestMultisigChange:
             )
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -345,7 +353,7 @@ class TestMultisigChange:
         )
 
         out1 = proto.TxOutputType(
-            address="2N2aFoogGntQFFwdUVPfRmutXD22ThcNTsR",
+            address="3B23k4kFBRtu49zvpG3Z9xuFzfpHvxBcwt",
             amount=40000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -363,7 +371,7 @@ class TestMultisigChange:
             )
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -386,7 +394,7 @@ class TestMultisigChange:
         )
 
         out1 = proto.TxOutputType(
-            address="2N2aFoogGntQFFwdUVPfRmutXD22ThcNTsR",
+            address="3B23k4kFBRtu49zvpG3Z9xuFzfpHvxBcwt",
             amount=40000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -402,7 +410,7 @@ class TestMultisigChange:
             client.set_expected_responses(self._responses(self.inp1, self.inp2))
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp2],
                 [out1, out2],
                 prev_txes=TX_API,
@@ -432,7 +440,7 @@ class TestMultisigChange:
         )
 
         out2 = proto.TxOutputType(
-            address="2NFJjQcU8mw4Z3ywpbek8HL1VoJ27GDrkHw",
+            address="3PkXLsY7AUZCrCKGvX8FfP2EawowUBMbcg",
             amount=65000000,
             script_type=proto.OutputScriptType.PAYTOADDRESS,
         )
@@ -441,7 +449,7 @@ class TestMultisigChange:
             client.set_expected_responses(self._responses(self.inp1, self.inp3))
             _, serialized_tx = btc.sign_tx(
                 client,
-                "Testnet",
+                "Bitcoin",
                 [self.inp1, self.inp3],
                 [out1, out2],
                 prev_txes=TX_API,

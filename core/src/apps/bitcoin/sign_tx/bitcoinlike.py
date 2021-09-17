@@ -1,18 +1,17 @@
 from micropython import const
 
 from trezor import wire
-from trezor.messages.SignTx import SignTx
-from trezor.messages.TransactionType import TransactionType
-from trezor.messages.TxInputType import TxInputType
+from trezor.messages import PrevTx, SignTx, TxInput
 
 from apps.common.writers import write_bitcoin_varint
 
 from .. import multisig, writers
+from ..common import input_is_nonsegwit
 from . import helpers
-from .bitcoin import Bitcoin, input_is_nonsegwit
+from .bitcoin import Bitcoin
 
 if False:
-    from typing import List, Union
+    from .tx_info import OriginalTxInfo, TxInfo
 
 _SIGHASH_FORKID = const(0x40)
 
@@ -43,19 +42,28 @@ class Bitcoinlike(Bitcoin):
     async def get_tx_digest(
         self,
         i: int,
-        txi: TxInputType,
-        public_keys: List[bytes],
+        txi: TxInput,
+        tx_info: TxInfo | OriginalTxInfo,
+        public_keys: list[bytes],
         threshold: int,
         script_pubkey: bytes,
+        tx_hash: bytes | None = None,
     ) -> bytes:
         if self.coin.force_bip143:
-            return self.hash143_preimage_hash(txi, public_keys, threshold)
+            return tx_info.hash143.preimage_hash(
+                txi,
+                public_keys,
+                threshold,
+                tx_info.tx,
+                self.coin,
+                self.get_sighash_type(txi),
+            )
         else:
             return await super().get_tx_digest(
-                i, txi, public_keys, threshold, script_pubkey
+                i, txi, tx_info, public_keys, threshold, script_pubkey
             )
 
-    def get_sighash_type(self, txi: TxInputType) -> int:
+    def get_sighash_type(self, txi: TxInput) -> int:
         hashtype = super().get_sighash_type(txi)
         if self.coin.fork_id is not None:
             hashtype |= (self.coin.fork_id << 8) | _SIGHASH_FORKID
@@ -64,18 +72,19 @@ class Bitcoinlike(Bitcoin):
     def write_tx_header(
         self,
         w: writers.Writer,
-        tx: Union[SignTx, TransactionType],
+        tx: SignTx | PrevTx,
         witness_marker: bool,
     ) -> None:
         writers.write_uint32(w, tx.version)  # nVersion
         if self.coin.timestamp:
+            assert tx.timestamp is not None  # checked in sanitize_*
             writers.write_uint32(w, tx.timestamp)
         if witness_marker:
             write_bitcoin_varint(w, 0x00)  # segwit witness marker
             write_bitcoin_varint(w, 0x01)  # segwit witness flag
 
     async def write_prev_tx_footer(
-        self, w: writers.Writer, tx: TransactionType, prev_hash: bytes
+        self, w: writers.Writer, tx: PrevTx, prev_hash: bytes
     ) -> None:
         await super().write_prev_tx_footer(w, tx, prev_hash)
 

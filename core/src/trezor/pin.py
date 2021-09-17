@@ -1,19 +1,17 @@
-from trezor import ui, utils
+from trezor import utils
 
 if False:
-    from typing import Any, Optional
+    from typing import Any
 
 
-def pin_to_int(pin: str) -> int:
-    return int("1" + pin)
-
-
-_previous_progress = None  # type: Optional[int]
-_previous_seconds = None  # type: Optional[int]
-keepalive_callback = None  # type: Any
+_previous_progress: int | None = None
+_previous_seconds: int | None = None
+keepalive_callback: Any = None
 
 
 def show_pin_timeout(seconds: int, progress: int, message: str) -> bool:
+    from trezor import ui
+
     global _previous_progress
     global _previous_seconds
 

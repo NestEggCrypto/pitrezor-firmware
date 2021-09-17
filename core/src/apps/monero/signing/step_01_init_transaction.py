@@ -4,21 +4,19 @@ Initializes a new transaction.
 
 import gc
 
-from apps.monero import CURVE, misc, signing
-from apps.monero.layout import confirms
+from apps.monero import layout, misc, signing
 from apps.monero.signing.state import State
 from apps.monero.xmr import crypto, monero
 
 if False:
-    from typing import List
     from apps.monero.xmr.types import Sc25519, Ge25519
-    from trezor.messages.MoneroTransactionData import MoneroTransactionData
-    from trezor.messages.MoneroTransactionRsigData import MoneroTransactionRsigData
-    from trezor.messages.MoneroAccountPublicAddress import MoneroAccountPublicAddress
-    from trezor.messages.MoneroTransactionDestinationEntry import (
+    from trezor.messages import (
+        MoneroAccountPublicAddress,
+        MoneroTransactionData,
         MoneroTransactionDestinationEntry,
+        MoneroTransactionInitAck,
+        MoneroTransactionRsigData,
     )
-    from trezor.messages.MoneroTransactionInitAck import MoneroTransactionInitAck
 
 
 async def init_transaction(
@@ -31,9 +29,7 @@ async def init_transaction(
     from apps.monero.signing import offloading_keys
     from apps.common import paths
 
-    await paths.validate_path(
-        state.ctx, misc.validate_full_path, keychain, address_n, CURVE
-    )
+    await paths.validate_path(state.ctx, keychain, address_n)
 
     state.creds = misc.get_creds(keychain, address_n, network_type)
     state.client_version = tsx_data.client_version or 0
@@ -51,7 +47,7 @@ async def init_transaction(
     state.progress_cur = 0
 
     # Ask for confirmation
-    await confirms.require_confirm_transaction(
+    await layout.require_confirm_transaction(
         state.ctx, state, tsx_data, state.creds.network_type
     )
     state.creds.address = None
@@ -68,10 +64,14 @@ async def init_transaction(
     if tsx_data.hard_fork:
         state.hard_fork = tsx_data.hard_fork
 
+    state.tx_type = (
+        signing.RctType.CLSAG if state.hard_fork >= 13 else signing.RctType.Bulletproof2
+    )
+
     # Ensure change is correct
     _check_change(state, tsx_data.outputs)
 
-    # At least two outpus are required, this applies also for sweep txs
+    # At least two outputs are required, this applies also for sweep txs
     # where one fake output is added. See _check_change for more info
     if state.output_count < 2:
         raise signing.NotEnoughOutputsError("At least two outputs are required")
@@ -92,7 +92,7 @@ async def init_transaction(
 
     # Final message hasher
     state.full_message_hasher.init()
-    state.full_message_hasher.set_type_fee(signing.RctType.Bulletproof2, state.fee)
+    state.full_message_hasher.set_type_fee(state.tx_type, state.fee)
 
     # Sub address precomputation
     if tsx_data.account is not None and tsx_data.minor_indices:
@@ -112,15 +112,17 @@ async def init_transaction(
 
     state.mem_trace(6)
 
-    from trezor.messages.MoneroTransactionInitAck import MoneroTransactionInitAck
-    from trezor.messages.MoneroTransactionRsigData import MoneroTransactionRsigData
+    from trezor.messages import (
+        MoneroTransactionInitAck,
+        MoneroTransactionRsigData,
+    )
 
-    rsig_data = MoneroTransactionRsigData(offload_type=state.rsig_offload)
+    rsig_data = MoneroTransactionRsigData(offload_type=int(state.rsig_offload))
 
     return MoneroTransactionInitAck(hmacs=hmacs, rsig_data=rsig_data)
 
 
-def _check_subaddresses(state: State, outputs: List[MoneroTransactionDestinationEntry]):
+def _check_subaddresses(state: State, outputs: list[MoneroTransactionDestinationEntry]):
     """
     Using subaddresses leads to a few poorly documented exceptions.
 
@@ -169,7 +171,7 @@ def _get_primary_change_address(state: State) -> MoneroAccountPublicAddress:
     """
     Computes primary change address for the current account index
     """
-    from trezor.messages.MoneroAccountPublicAddress import MoneroAccountPublicAddress
+    from trezor.messages import MoneroAccountPublicAddress
 
     D, C = monero.generate_sub_address_keys(
         state.creds.view_key_private, state.creds.spend_key_public, state.account_idx, 0
@@ -219,7 +221,7 @@ def _check_grouping(state: State):
         raise ValueError("Invalid grouping")
 
 
-def _check_change(state: State, outputs: List[MoneroTransactionDestinationEntry]):
+def _check_change(state: State, outputs: list[MoneroTransactionDestinationEntry]):
     """
     Check if the change address in state.output_change (from `tsx_data.outputs`) is
     a) among tx outputs
@@ -272,11 +274,11 @@ def _compute_sec_keys(state: State, tsx_data: MoneroTransactionData):
     """
     Generate master key H( H(TsxData || tx_priv) || rand )
     """
-    import protobuf
+    from trezor import protobuf
     from apps.monero.xmr.keccak_hasher import get_keccak_writer
 
     writer = get_keccak_writer()
-    protobuf.dump_message(writer, tsx_data)
+    writer.write(protobuf.dump_message_buffer(tsx_data))
     writer.write(crypto.encodeint(state.tx_priv))
 
     master_key = crypto.keccak_2hash(
@@ -286,7 +288,7 @@ def _compute_sec_keys(state: State, tsx_data: MoneroTransactionData):
     state.key_enc = crypto.keccak_2hash(b"enc" + master_key)
 
 
-def _precompute_subaddr(state: State, account: int, indices: List[int]):
+def _precompute_subaddr(state: State, account: int, indices: list[int]):
     """
     Precomputes subaddresses for account (major) and list of indices (minors)
     Subaddresses have to be stored in encoded form - unique representation.
@@ -362,7 +364,7 @@ def _get_key_for_payment_id_encryption(
     dummy payment ID is set for better transaction uniformity if possible.
     """
     from apps.monero.xmr.addresses import addr_eq
-    from trezor.messages.MoneroAccountPublicAddress import MoneroAccountPublicAddress
+    from trezor.messages import MoneroAccountPublicAddress
 
     addr = MoneroAccountPublicAddress(
         spend_public_key=crypto.NULL_KEY_ENC, view_public_key=crypto.NULL_KEY_ENC

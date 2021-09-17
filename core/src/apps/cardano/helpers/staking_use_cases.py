@@ -1,13 +1,12 @@
-from trezor.messages import CardanoAddressType
+from trezor.enums import CardanoAddressType
 
-from ..address import get_public_key_hash, validate_full_path
+from ..address import get_public_key_hash
 from ..seed import is_shelley_path
 from .utils import to_account_path
 
 if False:
-    from typing import List
     from trezor.messages import CardanoAddressParametersType
-    from . import seed
+    from ..seed import Keychain
 
 
 """
@@ -23,13 +22,9 @@ MISMATCH = 2
 POINTER_ADDRESS = 3
 
 
-def get(
-    keychain: seed.Keychain, address_parameters: CardanoAddressParametersType
-) -> int:
+def get(keychain: Keychain, address_parameters: CardanoAddressParametersType) -> int:
     address_type = address_parameters.address_type
     if address_type == CardanoAddressType.BASE:
-        if not validate_full_path(address_parameters.address_n):
-            return MISMATCH
         if not is_shelley_path(address_parameters.address_n):
             return MISMATCH
 
@@ -55,5 +50,5 @@ def get(
         return NO_STAKING
 
 
-def _path_to_staking_path(path: List[int]) -> List[int]:
+def _path_to_staking_path(path: list[int]) -> list[int]:
     return to_account_path(path) + [2, 0]

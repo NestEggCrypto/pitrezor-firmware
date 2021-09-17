@@ -16,8 +16,9 @@
 
 import pytest
 
-from trezorlib import btc, messages
+from trezorlib import btc, device, messages
 from trezorlib.exceptions import TrezorFailure
+from trezorlib.messages import SafetyCheckLevel
 from trezorlib.tools import parse_path
 
 from .. import bip32
@@ -32,7 +33,6 @@ def getmultisig(chain, nr, xpubs, signatures=[b"", b"", b""]):
     )
 
 
-@pytest.mark.skip_ui
 class TestMsgGetaddress:
     def test_btc(self, client):
         assert (
@@ -144,30 +144,42 @@ class TestMsgGetaddress:
             )
 
     @pytest.mark.multisig
-    def test_multisig_missing(self, client):
-        xpubs = []
-        for n in range(1, 4):
-            # shift account numbers by 10 to create valid multisig,
-            # but not containing the keys used below
-            n = n + 10
-            node = btc.get_public_node(client, parse_path("44'/0'/%d'" % n))
-            xpubs.append(node.xpub)
-        for nr in range(1, 4):
+    @pytest.mark.parametrize("show_display", (True, False))
+    def test_multisig_missing(self, client, show_display):
+        # Multisig with global suffix specification.
+        # Use account numbers 1, 2 and 3 to create a valid multisig,
+        # but not containing the keys from account 0 used below.
+        nodes = [
+            btc.get_public_node(client, parse_path("44'/0'/%d'" % i)).node
+            for i in range(1, 4)
+        ]
+        multisig1 = messages.MultisigRedeemScriptType(
+            nodes=nodes, address_n=[0, 0], signatures=[b"", b"", b""], m=2
+        )
+
+        # Multisig with per-node suffix specification.
+        node = btc.get_public_node(
+            client, parse_path("44h/0h/0h/0"), coin_name="Bitcoin"
+        ).node
+
+        multisig2 = messages.MultisigRedeemScriptType(
+            pubkeys=[
+                messages.HDNodePathType(node=node, address_n=[1]),
+                messages.HDNodePathType(node=node, address_n=[2]),
+                messages.HDNodePathType(node=node, address_n=[3]),
+            ],
+            signatures=[b"", b"", b""],
+            m=2,
+        )
+
+        for multisig in (multisig1, multisig2):
             with pytest.raises(TrezorFailure):
                 btc.get_address(
                     client,
                     "Bitcoin",
-                    parse_path("44'/0'/%d'/0/0" % nr),
-                    show_display=(nr == 1),
-                    multisig=getmultisig(0, 0, xpubs=xpubs),
-                )
-            with pytest.raises(TrezorFailure):
-                btc.get_address(
-                    client,
-                    "Bitcoin",
-                    parse_path("44'/0'/%d'/1/0" % nr),
-                    show_display=(nr == 1),
-                    multisig=getmultisig(1, 0, xpubs=xpubs),
+                    parse_path("44'/0'/0'/0/0"),
+                    show_display=show_display,
+                    multisig=multisig,
                 )
 
     @pytest.mark.altcoin
@@ -217,31 +229,46 @@ class TestMsgGetaddress:
         assert address1 == address2
 
 
-@pytest.mark.skip_t1
-@pytest.mark.skip_ui
 def test_invalid_path(client):
     with pytest.raises(TrezorFailure, match="Forbidden key path"):
         # slip44 id mismatch
-        btc.get_address(client, "Bitcoin", parse_path("m/44'/111'/0'/0/0"))
+        btc.get_address(
+            client, "Bitcoin", parse_path("m/44'/111'/0'/0/0"), show_display=True
+        )
 
 
-@pytest.mark.skip_t1
 def test_unknown_path(client):
+    UNKNOWN_PATH = parse_path("m/44'/9'/0'/0/0")
+    with client:
+        client.set_expected_responses([messages.Failure])
+
+        with pytest.raises(TrezorFailure, match="Forbidden key path"):
+            # account number is too high
+            btc.get_address(client, "Bitcoin", UNKNOWN_PATH, show_display=True)
+
+    # disable safety checks
+    device.apply_settings(client, safety_checks=SafetyCheckLevel.PromptTemporarily)
+
     with client:
         client.set_expected_responses(
             [
                 messages.ButtonRequest(
                     code=messages.ButtonRequestType.UnknownDerivationPath
                 ),
-                messages.Address(),
+                messages.ButtonRequest(code=messages.ButtonRequestType.Address),
+                messages.Address,
             ]
         )
-        # account number is too high
-        btc.get_address(client, "Bitcoin", parse_path("m/44'/0'/21'/0/0"))
+        # try again with a warning
+        btc.get_address(client, "Bitcoin", UNKNOWN_PATH, show_display=True)
+
+    with client:
+        # no warning is displayed when the call is silent
+        client.set_expected_responses([messages.Address])
+        btc.get_address(client, "Bitcoin", UNKNOWN_PATH, show_display=False)
 
 
 @pytest.mark.altcoin
-@pytest.mark.skip_ui
 def test_crw(client):
     assert (
         btc.get_address(client, "Crown", parse_path("44'/72'/0'/0/0"))

@@ -50,8 +50,8 @@ void check_lock_screen(void) {
     return;
   }
 
-  // button held for long enough (2 seconds)
-  if (layoutLast == layoutHome && button.NoDown >= 285000 * 2) {
+  // button held for long enough (5 seconds)
+  if (layoutLast == layoutHome && button.NoDown >= 114000 * 5) {
     layoutDialog(&bmp_icon_question, _("Cancel"), _("Lock Device"), NULL,
                  _("Do you really want to"), _("lock your Trezor?"), NULL, NULL,
                  NULL, NULL);
@@ -123,7 +123,7 @@ int main(void) {
                                    // unpredictable stack protection checks
   oledInit();
 #else
-  check_bootloader(true);
+  check_and_replace_bootloader(true);
   setupApp();
   __stack_chk_guard = random32();  // this supports compiler provided
                                    // unpredictable stack protection checks
@@ -149,7 +149,8 @@ int main(void) {
 #endif
 #endif
 
-  oledDrawBitmap(40, 0, &bmp_logo64);
+  oledDrawBitmap(40, 0, &bmp_logo64_half);
+  oledDrawBitmapFlip(40 + 24, 0, &bmp_logo64_half);
   oledRefresh();
 
   config_init();

@@ -40,17 +40,21 @@
 #include "display.h"
 #include "flash.h"
 #include "mpu.h"
-#ifdef RDI
-#include "rdi.h"
+#include "random_delays.h"
+#ifdef SYSTEM_VIEW
+#include "systemview.h"
 #endif
 #include "rng.h"
 #include "sdcard.h"
 #include "supervise.h"
 #include "touch.h"
 
+// from util.s
+extern void shutdown_privileged(void);
+
 int main(void) {
-  // initialize pseudo-random number generator
-  drbg_init();
+  random_delays_init();
+
 #ifdef RDI
   rdi_start();
 #endif
@@ -61,6 +65,10 @@ int main(void) {
 #endif
 
   collect_hw_entropy();
+
+#ifdef SYSTEM_VIEW
+  enable_systemview();
+#endif
 
 #if TREZOR_MODEL == T
 #if PRODUCTION
@@ -79,6 +87,7 @@ int main(void) {
 #endif
 
 #if TREZOR_MODEL == T
+  // display_init_seq();
   sdcard_init();
   touch_init();
   touch_power_on();
@@ -168,6 +177,16 @@ void SVC_C_Handler(uint32_t *stack) {
       break;
     case SVC_SET_PRIORITY:
       NVIC_SetPriority(stack[0], stack[1]);
+      break;
+#ifdef SYSTEM_VIEW
+    case SVC_GET_DWT_CYCCNT:
+      cyccnt_cycles = *DWT_CYCCNT_ADDR;
+      break;
+#endif
+    case SVC_SHUTDOWN:
+      shutdown_privileged();
+      for (;;)
+        ;
       break;
     default:
       stack[0] = 0xffffffff;

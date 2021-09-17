@@ -21,10 +21,11 @@
 #include "py/runtime.h"
 
 #include "bip39.h"
+#include "sha2.h"
 
 /// package: trezorcrypto.bip39
 
-/// def complete_word(prefix: str) -> Optional[str]:
+/// def complete_word(prefix: str) -> str | None:
 ///     """
 ///     Return the first word from the wordlist starting with prefix.
 ///     """
@@ -124,7 +125,7 @@ STATIC void wrapped_ui_wait_callback(uint32_t current, uint32_t total) {
 /// def seed(
 ///     mnemonic: str,
 ///     passphrase: str,
-///     callback: Callable[[int, int], None] = None,
+///     callback: Callable[[int, int], None] | None = None,
 /// ) -> bytes:
 ///     """
 ///     Generate seed from mnemonic and passphrase.
@@ -135,19 +136,21 @@ STATIC mp_obj_t mod_trezorcrypto_bip39_seed(size_t n_args,
   mp_buffer_info_t phrase = {0};
   mp_get_buffer_raise(args[0], &mnemo, MP_BUFFER_READ);
   mp_get_buffer_raise(args[1], &phrase, MP_BUFFER_READ);
-  uint8_t seed[64] = {0};
+  vstr_t seed = {0};
+  vstr_init_len(&seed, SHA512_DIGEST_LENGTH);
   const char *pmnemonic = mnemo.len > 0 ? mnemo.buf : "";
   const char *ppassphrase = phrase.len > 0 ? phrase.buf : "";
   if (n_args > 2) {
     // generate with a progress callback
     ui_wait_callback = args[2];
-    mnemonic_to_seed(pmnemonic, ppassphrase, seed, wrapped_ui_wait_callback);
+    mnemonic_to_seed(pmnemonic, ppassphrase, (uint8_t *)seed.buf,
+                     wrapped_ui_wait_callback);
     ui_wait_callback = mp_const_none;
   } else {
     // generate without callback
-    mnemonic_to_seed(pmnemonic, ppassphrase, seed, NULL);
+    mnemonic_to_seed(pmnemonic, ppassphrase, (uint8_t *)seed.buf, NULL);
   }
-  return mp_obj_new_bytes(seed, sizeof(seed));
+  return mp_obj_new_str_from_vstr(&mp_type_bytes, &seed);
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_trezorcrypto_bip39_seed_obj, 2,
                                            3, mod_trezorcrypto_bip39_seed);

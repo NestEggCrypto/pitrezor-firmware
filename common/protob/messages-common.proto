@@ -10,7 +10,7 @@ option java_outer_classname = "TrezorMessageCommon";
  * @end
  */
 message Success {
-    optional string message = 1;    // human readable description of action or request-specific payload
+    optional string message = 1 [default=""]; // human readable description of action or request-specific payload
 }
 
 /**
@@ -34,6 +34,7 @@ message Failure {
         Failure_NotInitialized = 11;
         Failure_PinMismatch = 12;
         Failure_WipeCodeMismatch = 13;
+        Failure_InvalidSession = 14;
         Failure_FirmwareError = 99;
     }
 }
@@ -44,7 +45,8 @@ message Failure {
  * @next ButtonAck
  */
 message ButtonRequest {
-    optional ButtonRequestType code = 1;
+    optional ButtonRequestType code = 1;  // enum identifier of the screen
+    optional uint32 pages = 2;            // if the screen is paginated, number of pages
     /**
     * Type of button request
     */
@@ -155,5 +157,5 @@ message HDNodeType {
     required uint32 child_num = 3;
     required bytes chain_code = 4;
     optional bytes private_key = 5;
-    optional bytes public_key = 6;
+    required bytes public_key = 6;
 }

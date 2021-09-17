@@ -1,9 +1,8 @@
 import storage.device
 from trezor import ui, wire
-from trezor.messages import ButtonRequestType
-from trezor.messages.GetNextU2FCounter import GetNextU2FCounter
-from trezor.messages.NextU2FCounter import NextU2FCounter
-from trezor.ui.text import Text
+from trezor.enums import ButtonRequestType
+from trezor.messages import GetNextU2FCounter, NextU2FCounter
+from trezor.ui.components.tt.text import Text
 
 from apps.common.confirm import require_confirm
 
@@ -19,4 +18,4 @@ async def get_next_u2f_counter(
     text.normal("the U2F counter?")
     await require_confirm(ctx, text, code=ButtonRequestType.ProtectCall)
 
-    return NextU2FCounter(storage.device.next_u2f_counter())
+    return NextU2FCounter(u2f_counter=storage.device.next_u2f_counter())

@@ -79,7 +79,10 @@ def for_all(*args, legacy_minimum_version=(1, 0, 0), core_minimum_version=(2, 0,
         try:
             for tag in ALL_TAGS[gen]:
                 if tag.startswith("v"):
-                    tag_version = tuple(int(n) for n in tag[1:].split("."))
+                    tag_version = tag[1:]
+                    if "-" in tag:  # contains revision
+                        tag_version = tag[1:-9]
+                    tag_version = tuple(int(n) for n in tag_version.split("."))
                     if tag_version < minimum_version:
                         continue
                 all_params.append((gen, tag))
@@ -93,3 +96,10 @@ def for_all(*args, legacy_minimum_version=(1, 0, 0), core_minimum_version=(2, 0,
         return pytest.mark.skip("no versions are applicable")
 
     return pytest.mark.parametrize("gen, tag", all_params)
+
+
+def for_tags(*args):
+    enabled_gens = SELECTED_GENS or ("core", "legacy")
+    return pytest.mark.parametrize(
+        "gen, tags", [(gen, tags) for gen, tags in args if gen in enabled_gens]
+    )

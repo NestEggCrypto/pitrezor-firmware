@@ -1,23 +1,32 @@
 from ustruct import pack, unpack
 
-from trezor import wire
+from trezor import ui, wire
 from trezor.crypto.hashlib import sha256
-from trezor.messages.ECDHSessionKey import ECDHSessionKey
-from trezor.ui.text import Text
-from trezor.utils import chunks
+from trezor.messages import ECDHSessionKey
+from trezor.ui.layouts import confirm_hex
 
 from apps.common import HARDENED
-from apps.common.confirm import require_confirm
 from apps.common.keychain import get_keychain
+from apps.common.paths import AlwaysMatchingSchema
 
 from .sign_identity import serialize_identity, serialize_identity_without_proto
 
+if False:
+    from trezor.messages import GetECDHSessionKey, IdentityType
 
-async def get_ecdh_session_key(ctx, msg):
+    from apps.common.paths import Bip32Path
+
+# This module implements the SLIP-0017 Elliptic Curve Diffie-Hellman algorithm, using a
+# deterministic hierarchy, see https://github.com/satoshilabs/slips/blob/master/slip-0017.md.
+
+
+async def get_ecdh_session_key(
+    ctx: wire.Context, msg: GetECDHSessionKey
+) -> ECDHSessionKey:
     if msg.ecdsa_curve_name is None:
         msg.ecdsa_curve_name = "secp256k1"
 
-    keychain = await get_keychain(ctx, msg.ecdsa_curve_name, [[]])
+    keychain = await get_keychain(ctx, msg.ecdsa_curve_name, [AlwaysMatchingSchema])
     identity = serialize_identity(msg.identity)
 
     await require_confirm_ecdh_session_key(ctx, msg.identity)
@@ -30,22 +39,28 @@ async def get_ecdh_session_key(ctx, msg):
         peer_public_key=msg.peer_public_key,
         curve=msg.ecdsa_curve_name,
     )
-    return ECDHSessionKey(session_key=session_key)
+    return ECDHSessionKey(session_key=session_key, public_key=node.public_key())
 
 
-async def require_confirm_ecdh_session_key(ctx, identity):
-    lines = chunks(serialize_identity_without_proto(identity), 18)
+async def require_confirm_ecdh_session_key(
+    ctx: wire.Context, identity: IdentityType
+) -> None:
     proto = identity.proto.upper() if identity.proto else "identity"
-    text = Text("Decrypt %s" % proto)
-    text.mono(*lines)
-    await require_confirm(ctx, text)
+    await confirm_hex(
+        ctx,
+        "ecdh_session_key",
+        "Decrypt %s" % proto,
+        serialize_identity_without_proto(identity),
+        icon=ui.ICON_DEFAULT,
+        icon_color=ui.ORANGE_ICON,
+        truncate=True,  # uri without protocol, probably should show entire
+    )
 
 
-def get_ecdh_path(identity: str, index: int):
-    identity_hash = sha256(pack("<I", index) + identity).digest()
+def get_ecdh_path(identity: str, index: int) -> Bip32Path:
+    identity_hash = sha256(pack("<I", index) + identity.encode()).digest()
 
-    address_n = (17,) + unpack("<IIII", identity_hash[:16])
-    address_n = [HARDENED | x for x in address_n]
+    address_n = [HARDENED | x for x in (17,) + unpack("<IIII", identity_hash[:16])]
 
     return address_n
 

@@ -2,13 +2,11 @@ from micropython import const
 
 import storage.device
 from trezor import fatfs
-from trezor.crypto import hmac
-from trezor.crypto.hashlib import sha256
 from trezor.sdcard import with_filesystem
 from trezor.utils import consteq
 
 if False:
-    from typing import Optional, TypeVar, Callable
+    from typing import TypeVar, Callable
 
     T = TypeVar("T", bound=Callable)
 
@@ -26,7 +24,9 @@ def is_enabled() -> bool:
 
 
 def compute_auth_tag(salt: bytes, auth_key: bytes) -> bytes:
-    digest = hmac.new(auth_key, salt, sha256).digest()
+    from trezor.crypto import hmac
+
+    digest = hmac(hmac.SHA256, auth_key, salt).digest()
     return digest[:SD_SALT_AUTH_TAG_LEN_BYTES]
 
 
@@ -39,7 +39,7 @@ def _get_salt_path(new: bool = False) -> str:
 
 
 @with_filesystem
-def _load_salt(auth_key: bytes, path: str) -> Optional[bytearray]:
+def _load_salt(auth_key: bytes, path: str) -> bytearray | None:
     # Load the salt file if it exists.
     try:
         with fatfs.open(path, "r") as f:
@@ -59,7 +59,7 @@ def _load_salt(auth_key: bytes, path: str) -> Optional[bytearray]:
 
 
 @with_filesystem
-def load_sd_salt() -> Optional[bytearray]:
+def load_sd_salt() -> bytearray | None:
     salt_auth_key = storage.device.get_sd_salt_auth_key()
     if salt_auth_key is None:
         return None

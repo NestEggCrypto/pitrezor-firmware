@@ -55,13 +55,13 @@ def _get_xpub(client, passphrase=None):
     """Get XPUB and check that the appropriate passphrase flow has happened."""
     if passphrase is not None:
         expected_responses = [
-            messages.PassphraseRequest(),
-            messages.ButtonRequest(),
-            messages.ButtonRequest(),
-            messages.PublicKey(),
+            messages.PassphraseRequest,
+            messages.ButtonRequest,
+            messages.ButtonRequest,
+            messages.PublicKey,
         ]
     else:
-        expected_responses = [messages.PublicKey()]
+        expected_responses = [messages.PublicKey]
 
     with client:
         client.use_passphrase(passphrase or "")
@@ -70,7 +70,6 @@ def _get_xpub(client, passphrase=None):
         return result.xpub
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_session_with_passphrase(client):
     # Let's start the communication by calling Initialize.
@@ -98,7 +97,6 @@ def test_session_with_passphrase(client):
     assert _get_xpub(client, passphrase="A") == XPUB_PASSPHRASES["A"]
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_multiple_sessions(client):
     # start SESSIONS_STORED sessions
@@ -138,7 +136,6 @@ def test_multiple_sessions(client):
         assert session_id != new_session_id
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_multiple_passphrases(client):
     # start a session
@@ -172,7 +169,6 @@ def test_multiple_passphrases(client):
     assert _get_xpub(client, passphrase=None) == XPUB_PASSPHRASES["B"]
 
 
-@pytest.mark.skip_ui
 @pytest.mark.slow
 @pytest.mark.setup_client(passphrase=True)
 def test_max_sessions_with_passphrases(client):
@@ -215,7 +211,6 @@ def test_max_sessions_with_passphrases(client):
         _get_xpub(client, passphrase="whatever")  # passphrase is prompted
 
 
-@pytest.mark.skip_ui
 def test_session_enable_passphrase(client):
     # Let's start the communication by calling Initialize.
     session_id = _init_session(client)
@@ -239,7 +234,6 @@ def test_session_enable_passphrase(client):
     assert _get_xpub(client, passphrase="A") == XPUB_PASSPHRASES["A"]
 
 
-@pytest.mark.skip_ui
 @pytest.mark.skip_t1
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_on_device(client):
@@ -279,7 +273,6 @@ def test_passphrase_on_device(client):
     assert response.xpub == XPUB_PASSPHRASES["A"]
 
 
-@pytest.mark.skip_ui
 @pytest.mark.skip_t1
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_always_on_device(client):
@@ -314,7 +307,6 @@ def test_passphrase_always_on_device(client):
     assert response.xpub == XPUB_PASSPHRASES["A"]
 
 
-@pytest.mark.skip_ui
 @pytest.mark.skip_t2
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_on_device_not_possible_on_t1(client):
@@ -331,7 +323,6 @@ def test_passphrase_on_device_not_possible_on_t1(client):
     assert response.code == FailureType.DataError
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_ack_mismatch(client):
     response = client.call_raw(XPUB_REQUEST)
@@ -341,7 +332,6 @@ def test_passphrase_ack_mismatch(client):
     assert response.code == FailureType.DataError
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_missing(client):
     response = client.call_raw(XPUB_REQUEST)
@@ -357,7 +347,6 @@ def test_passphrase_missing(client):
     assert response.code == FailureType.DataError
 
 
-@pytest.mark.skip_ui
 @pytest.mark.setup_client(passphrase=True)
 def test_passphrase_length(client):
     def call(passphrase: str, expected_result: bool):
@@ -365,7 +354,7 @@ def test_passphrase_length(client):
         response = client.call_raw(XPUB_REQUEST)
         assert isinstance(response, messages.PassphraseRequest)
         try:
-            response = client.call(messages.PassphraseAck(passphrase))
+            response = client.call(messages.PassphraseAck(passphrase=passphrase))
             assert expected_result is True, "Call should have failed"
             assert isinstance(response, messages.PublicKey)
         except exceptions.TrezorFailure as e:
@@ -392,7 +381,6 @@ def _get_xpub_cardano(client, passphrase):
     return response.xpub
 
 
-@pytest.mark.skip_ui
 @pytest.mark.skip_t1
 @pytest.mark.altcoin
 @pytest.mark.setup_client(passphrase=True)
